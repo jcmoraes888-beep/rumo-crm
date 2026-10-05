@@ -19,6 +19,7 @@ from sqlalchemy.engine import Engine
 from .config import agora
 
 meta = MetaData()
+_ERRO_SECRETS: list[str] = []
 
 usuarios = Table(
     "usuarios", meta,
@@ -75,12 +76,16 @@ config_tb = Table(
 def _database_url() -> str:
     try:
         url = st.secrets.get("DATABASE_URL")
-    except Exception:  # sem secrets.toml
+    except Exception as e:  # sem secrets.toml (uso local) ou com erro de formatação
+        _ERRO_SECRETS.append(str(e))
         url = None
     url = url or os.environ.get("DATABASE_URL") or "sqlite:///rumo_crm.db"
     # Neon/Heroku às vezes entregam "postgres://"; o SQLAlchemy espera "postgresql://"
     if url.startswith("postgres://"):
         url = "postgresql://" + url[len("postgres://"):]
+    # usa sempre o driver psycopg (versão 3), o mesmo do requirements.txt
+    if url.startswith("postgresql://"):
+        url = "postgresql+psycopg://" + url[len("postgresql://"):]
     return url
 
 
@@ -93,6 +98,28 @@ def engine() -> Engine:
     eng = create_engine(url, **kw)
     meta.create_all(eng)
     return eng
+
+
+def usando_sqlite() -> bool:
+    return engine().dialect.name == "sqlite"
+
+
+def na_nuvem() -> bool:
+    """True quando roda no Streamlit Community Cloud."""
+    return os.path.isdir("/mount/src")
+
+
+def aviso_banco() -> None:
+    """Avisa quando o app está na nuvem sem banco permanente configurado."""
+    if na_nuvem() and usando_sqlite():
+        erro = _ERRO_SECRETS[-1] if _ERRO_SECRETS else ""
+        st.error(
+            "**Banco de dados temporário em uso.** O `DATABASE_URL` não foi encontrado nos Secrets, "
+            "então tudo o que for cadastrado será apagado quando o app reiniciar. "
+            "Em Manage app → Settings → Secrets, use exatamente o formato:\n\n"
+            '`DATABASE_URL = "postgresql://usuario:senha@host/banco?sslmode=require"`'
+            + (f"\n\nErro ao ler os Secrets: `{erro}`" if erro else "")
+        )
 
 
 # ---------------- Usuários ----------------

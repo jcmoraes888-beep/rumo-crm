@@ -11,6 +11,7 @@ st.set_page_config(page_title="Rumo CRM", page_icon="🧭", layout="wide")
 estilo()
 
 nome_empresa = db.get_config("empresa", "") or "Rumo CRM"
+db.aviso_banco()
 
 if not auth.usuario_atual():
     auth.tela_acesso(nome_empresa)
