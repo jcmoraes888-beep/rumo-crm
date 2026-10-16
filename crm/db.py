@@ -89,6 +89,15 @@ def _database_url() -> str:
     return url
 
 
+def chave_recuperacao() -> str:
+    """Chave secreta para redefinir senha pela tela de login (Secrets: CHAVE_RECUPERACAO)."""
+    try:
+        v = st.secrets.get("CHAVE_RECUPERACAO")
+    except Exception:
+        v = None
+    return str(v or os.environ.get("CHAVE_RECUPERACAO") or "").strip()
+
+
 @st.cache_resource
 def engine() -> Engine:
     url = _database_url()

@@ -41,36 +41,11 @@ def sair() -> None:
     st.rerun()
 
 
-def _redefinir_pelos_secrets() -> None:
-    """Esqueceu a senha? Coloque nos Secrets:
-        RESET_EMAIL = "seu@email.com"
-        RESET_SENHA = "nova-senha-com-8-ou-mais"
-    O app troca a senha desse usuário (e o reativa). Depois de entrar, APAGUE as duas linhas."""
-    try:
-        email = str(st.secrets.get("RESET_EMAIL", "")).strip()
-        nova = str(st.secrets.get("RESET_SENHA", ""))
-    except Exception:
-        return  # sem secrets.toml
-    if not email or not nova:
-        return
-    if len(nova) < 8:
-        st.error("RESET_SENHA nos Secrets precisa ter pelo menos 8 caracteres.")
-        return
-    u = db.usuario_por_email(email)
-    if not u:
-        st.error("RESET_EMAIL dos Secrets não corresponde a nenhum usuário cadastrado.")
-        return
-    if not (u["ativo"] and conferir(nova, u["senha_hash"])):
-        db.atualizar_usuario(u["id"], senha_hash=gerar_hash(nova), ativo=True)
-    st.warning("Senha redefinida pelos Secrets. Depois de entrar, apague RESET_EMAIL e RESET_SENHA dos Secrets.")
-
-
 def tela_acesso(nome_empresa: str) -> None:
     """Mostra o primeiro cadastro (se o banco estiver vazio) ou o login."""
     _, meio, _ = st.columns([1, 1.4, 1])
     with meio:
         st.title(nome_empresa)
-        _redefinir_pelos_secrets()
         if db.contar_usuarios() == 0:
             st.subheader("Configuração inicial")
             st.caption("Crie o usuário administrador. Ele poderá cadastrar os demais usuários em Ajustes.")
@@ -103,3 +78,40 @@ def tela_acesso(nome_empresa: str) -> None:
                     st.rerun()
                 else:
                     st.error("E-mail ou senha incorretos.")
+
+        _esqueci_senha()
+
+
+MAX_TENTATIVAS = 5
+
+
+def _esqueci_senha() -> None:
+    """Redefine a senha com a chave de recuperação guardada nos Secrets do app."""
+    chave = db.chave_recuperacao()
+    with st.expander("Esqueci minha senha"):
+        if not chave:
+            st.caption("Peça ao administrador para redefinir sua senha em **Ajustes → Alterar usuário**.")
+            return
+        tentativas = st.session_state.get("_tentativas_recuperacao", 0)
+        if tentativas >= MAX_TENTATIVAS:
+            st.error("Muitas tentativas. Recarregue a página para tentar de novo.")
+            return
+        st.caption("Informe a chave de recuperação, que fica em Manage app → Settings → Secrets.")
+        with st.form("recuperar_senha", clear_on_submit=True):
+            email = st.text_input("E-mail")
+            chave_digitada = st.text_input("Chave de recuperação", type="password")
+            s1 = st.text_input("Nova senha (mínimo 8 caracteres)", type="password")
+            s2 = st.text_input("Repita a nova senha", type="password")
+            if st.form_submit_button("Redefinir senha", width="stretch"):
+                u = db.usuario_por_email(email) if email.strip() else None
+                if not hmac.compare_digest(chave_digitada.strip().encode(), chave.encode()) or not u:
+                    st.session_state["_tentativas_recuperacao"] = tentativas + 1
+                    st.error("E-mail ou chave de recuperação incorretos.")
+                elif len(s1) < 8:
+                    st.error("A nova senha precisa ter pelo menos 8 caracteres.")
+                elif s1 != s2:
+                    st.error("As senhas não conferem.")
+                else:
+                    db.atualizar_usuario(u["id"], senha_hash=gerar_hash(s1), ativo=True)
+                    st.session_state.pop("_tentativas_recuperacao", None)
+                    st.success("Senha redefinida. Entre com o e-mail e a nova senha.")
