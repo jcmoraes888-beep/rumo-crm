@@ -33,6 +33,17 @@ Sem configuração, os dados ficam no arquivo `rumo_crm.db` (SQLite), na pasta d
    ```
 5. Abra o app e crie o administrador.
 
+### Esqueceu a senha?
+
+Em **Manage app → Settings → Secrets**, acrescente:
+
+```toml
+RESET_EMAIL = "seu@email.com"
+RESET_SENHA = "nova-senha-com-8-ou-mais"
+```
+
+Salve, abra o app e entre com a senha nova. Depois **apague as duas linhas** dos Secrets.
+
 > O Streamlit Cloud apaga arquivos locais quando o app reinicia. Por isso, em produção use sempre o PostgreSQL. O SQLite serve só para testes.
 
 ## Um CRM por cliente

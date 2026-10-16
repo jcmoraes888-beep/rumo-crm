@@ -41,11 +41,36 @@ def sair() -> None:
     st.rerun()
 
 
+def _redefinir_pelos_secrets() -> None:
+    """Esqueceu a senha? Coloque nos Secrets:
+        RESET_EMAIL = "seu@email.com"
+        RESET_SENHA = "nova-senha-com-8-ou-mais"
+    O app troca a senha desse usuário (e o reativa). Depois de entrar, APAGUE as duas linhas."""
+    try:
+        email = str(st.secrets.get("RESET_EMAIL", "")).strip()
+        nova = str(st.secrets.get("RESET_SENHA", ""))
+    except Exception:
+        return  # sem secrets.toml
+    if not email or not nova:
+        return
+    if len(nova) < 8:
+        st.error("RESET_SENHA nos Secrets precisa ter pelo menos 8 caracteres.")
+        return
+    u = db.usuario_por_email(email)
+    if not u:
+        st.error("RESET_EMAIL dos Secrets não corresponde a nenhum usuário cadastrado.")
+        return
+    if not (u["ativo"] and conferir(nova, u["senha_hash"])):
+        db.atualizar_usuario(u["id"], senha_hash=gerar_hash(nova), ativo=True)
+    st.warning("Senha redefinida pelos Secrets. Depois de entrar, apague RESET_EMAIL e RESET_SENHA dos Secrets.")
+
+
 def tela_acesso(nome_empresa: str) -> None:
     """Mostra o primeiro cadastro (se o banco estiver vazio) ou o login."""
     _, meio, _ = st.columns([1, 1.4, 1])
     with meio:
         st.title(nome_empresa)
+        _redefinir_pelos_secrets()
         if db.contar_usuarios() == 0:
             st.subheader("Configuração inicial")
             st.caption("Crie o usuário administrador. Ele poderá cadastrar os demais usuários em Ajustes.")
